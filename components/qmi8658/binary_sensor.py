@@ -14,6 +14,7 @@ CONF_QMI8658_ID = "qmi8658_id"
 CONF_MOTION = "motion"
 CONF_THRESHOLD = "threshold"
 CONF_WOM = "wom"
+CONF_INTERRUPT = "interrupt"
 
 QMI8658MotionBinarySensor = qmi8658_ns.class_(
     "QMI8658MotionBinarySensor", binary_sensor.BinarySensor, cg.Component
@@ -45,6 +46,9 @@ CONFIG_SCHEMA = cv.Schema(
                     min=1, max=255
                 ),  # mg units
                 cv.Required(CONF_PIN): pins.internal_gpio_input_pin_schema,
+                cv.Optional(CONF_INTERRUPT, default=1): cv.int_range(
+                    min=1, max=2
+                ),  # INT1 or INT2
             }
         ),
     }
@@ -65,5 +69,6 @@ async def to_code(config):
         await cg.register_component(sens, config[CONF_WOM])
         cg.add(sens.set_parent(parent))
         cg.add(sens.set_threshold(config[CONF_WOM][CONF_THRESHOLD]))
+        cg.add(sens.set_interrupt_number(config[CONF_WOM][CONF_INTERRUPT]))
         pin = await cg.gpio_pin_expression(config[CONF_WOM][CONF_PIN])
         cg.add(sens.set_interrupt_pin(pin))

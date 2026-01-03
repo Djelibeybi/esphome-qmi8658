@@ -53,6 +53,7 @@ float QMI8658Component::get_gyro_sensitivity_for_range_(GyroScale range) {
 }
 
 void QMI8658Component::setup() {
+  ESP_LOGI(TAG, "QMI8658 component version %s", QMI8658_VERSION);
   ESP_LOGI(TAG, "Setting up QMI8658...");
 
   // Soft reset the device
@@ -305,6 +306,8 @@ void QMI8658MotionBinarySensor::loop() {
 
   // Only publish if state changed (with small hysteresis)
   if (motion != this->last_state_) {
+    ESP_LOGV(TAG, "Motion %s: magnitude=%.2f m/s², deviation=%.2f, threshold=%.2f",
+             motion ? "DETECTED" : "cleared", magnitude, deviation, this->threshold_);
     this->last_state_ = motion;
     this->publish_state(motion);
   }
@@ -359,9 +362,11 @@ void QMI8658WoMBinarySensor::setup() {
   }
 
   // Configure the interrupt pin
+  // Per datasheet: "For each WoM event, the state of the selected interrupt line is toggled"
+  // We need to catch both edges to detect all motion events
   this->interrupt_pin_->setup();
   this->interrupt_pin_->attach_interrupt(
-      QMI8658WoMBinarySensor::gpio_interrupt_, this, gpio::INTERRUPT_RISING_EDGE);
+      QMI8658WoMBinarySensor::gpio_interrupt_, this, gpio::INTERRUPT_ANY_EDGE);
 
   // Configure Wake on Motion on the sensor
   if (!this->configure_wom_()) {
@@ -370,29 +375,128 @@ void QMI8658WoMBinarySensor::setup() {
     return;
   }
 
-  ESP_LOGI(TAG, "Wake on Motion configured with threshold: %d mg", this->threshold_);
+  // Read back and log key registers for debugging
+  uint8_t ctrl1_val, ctrl7_val, cal1_l_val, cal1_h_val;
+  this->parent_->read_byte(QMI8658_REG_CTRL1, &ctrl1_val);
+  this->parent_->read_byte(QMI8658_REG_CTRL7, &ctrl7_val);
+  this->parent_->read_byte(QMI8658_REG_CAL1_L, &cal1_l_val);
+  this->parent_->read_byte(QMI8658_REG_CAL1_H, &cal1_h_val);
+  ESP_LOGI(TAG, "WoM configured: threshold=%d mg, INT%d, blanking=%d samples",
+           this->threshold_, this->interrupt_number_, cal1_h_val & 0x3F);
+  ESP_LOGD(TAG, "WoM registers: CTRL1=0x%02X CTRL7=0x%02X CAL1_L=0x%02X CAL1_H=0x%02X",
+           ctrl1_val, ctrl7_val, cal1_l_val, cal1_h_val);
+  ESP_LOGW(TAG, "WoM mode active: Gyroscope disabled per datasheet requirements");
+
+  // Publish initial state so Home Assistant doesn't show "Unknown"
+  this->publish_state(false);
 }
 
 bool QMI8658WoMBinarySensor::configure_wom_() {
-  // WoM threshold is in CAL1_L register, 1mg per LSB
+  // WoM Configuration Procedure (per datasheet):
+  // 1. Disable sensors (CTRL7 = 0x00)
+  // 2. Set accelerometer sample rate and scale (CTRL2) - already done in main setup
+  // 3. Set WoM threshold (CAL1_L) and interrupt config (CAL1_H)
+  // 4. Execute CTRL9 command
+  // 5. Re-enable accelerometer (CTRL7)
+
+  ESP_LOGV(TAG, "Configuring WoM with INT%d", this->interrupt_number_);
+
+  // Step 1: Disable sensors
+  if (!this->parent_->write_byte(QMI8658_REG_CTRL7, 0x00)) {
+    return false;
+  }
+
+  // Step 3a: WoM threshold in CAL1_L register, 1mg per LSB
   if (!this->parent_->write_byte(QMI8658_REG_CAL1_L, this->threshold_)) {
     return false;
   }
 
-  // CAL1_H: blanking time and interrupt config
-  // Bit 7: INT2 enable, Bit 6: INT1 enable, Bits 5-0: blanking time
-  // Enable INT1 with 0x40, blanking time of 0x00
-  if (!this->parent_->write_byte(QMI8658_REG_CAL1_H, 0x40)) {
+  // Step 3b: CAL1_H interrupt config (per datasheet Table 33):
+  // Bits 7:6 - Interrupt select:
+  //   00 = INT1 (initial value 0)
+  //   10 = INT1 (initial value 1)
+  //   01 = INT2 (initial value 0)
+  //   11 = INT2 (initial value 1)
+  // Bits 5:0 - Blanking time (number of accel samples to ignore at startup)
+  //   Setting to 4 samples prevents spurious interrupts from startup transients
+  uint8_t cal1_h = (this->interrupt_number_ == 2) ? 0x44 : 0x04;  // INT2 or INT1, with 4 sample blanking
+  if (!this->parent_->write_byte(QMI8658_REG_CAL1_H, cal1_h)) {
     return false;
   }
 
-  // Send CTRL9 command to enable WoM
+  // Enable interrupt physical output in CTRL1
+  // Read current CTRL1 value (preserves address auto-increment setting)
+  uint8_t ctrl1;
+  if (!this->parent_->read_byte(QMI8658_REG_CTRL1, &ctrl1)) {
+    return false;
+  }
+  // Bit 3 = INT1 output enable, Bit 4 = INT2 output enable
+  if (this->interrupt_number_ == 2) {
+    ctrl1 |= 0x10;  // Enable INT2 output (push-pull mode)
+  } else {
+    ctrl1 |= 0x08;  // Enable INT1 output (push-pull mode)
+  }
+  if (!this->parent_->write_byte(QMI8658_REG_CTRL1, ctrl1)) {
+    return false;
+  }
+
+  // Step 4: Send CTRL9 command to configure WoM
   if (!this->parent_->write_byte(QMI8658_REG_CTRL9, QMI8658_CTRL9_CMD_WOM)) {
     return false;
   }
 
-  // Wait for command to complete
-  delay(1);
+  // Poll STATUS1 for command completion (bit 0 = CMD_DONE)
+  // Per datasheet: after writing CTRL9, poll until STATUSINT shows command done
+  uint8_t status = 0;
+  uint8_t statusint = 0;
+  int retries = 0;
+  const int max_retries = 100;  // 100 * 1ms = 100ms max wait
+
+  // First check STATUSINT for command acknowledgment (bit 7 = CmdDone)
+  do {
+    delay(1);
+    if (!this->parent_->read_byte(QMI8658_REG_STATUSINT, &statusint)) {
+      ESP_LOGW(TAG, "WoM: Failed to read STATUSINT");
+      return false;
+    }
+    retries++;
+  } while (((statusint & 0x80) == 0) && (retries < max_retries));
+
+  if (retries >= max_retries) {
+    ESP_LOGW(TAG, "WoM: CTRL9 command timeout (STATUSINT=0x%02X after %d retries)", statusint, retries);
+  } else {
+    ESP_LOGV(TAG, "WoM: CTRL9 command done after %d ms (STATUSINT=0x%02X)", retries, statusint);
+  }
+
+  // Read STATUS1 to check WoM status and clear any pending flags
+  if (!this->parent_->read_byte(QMI8658_REG_STATUS1, &status)) {
+    return false;
+  }
+  ESP_LOGV(TAG, "WoM STATUS1=0x%02X after command", status);
+
+  // Acknowledge the CTRL9 command (required per datasheet)
+  if (!this->parent_->write_byte(QMI8658_REG_CTRL9, QMI8658_CTRL9_CMD_ACK)) {
+    return false;
+  }
+
+  // Wait for acknowledge to be processed
+  retries = 0;
+  do {
+    delay(1);
+    if (!this->parent_->read_byte(QMI8658_REG_STATUSINT, &statusint)) {
+      return false;
+    }
+    retries++;
+  } while (((statusint & 0x80) != 0) && (retries < max_retries));
+
+  ESP_LOGV(TAG, "WoM: CTRL9 ACK processed after %d ms", retries);
+
+  // Step 5: Enable ONLY accelerometer for WoM mode (per datasheet Table 31)
+  // WoM mode requires: CTRL7 aEN=1, gEN=0, mEN=0
+  // Note: Gyroscope readings will not update while WoM is active
+  if (!this->parent_->write_byte(QMI8658_REG_CTRL7, QMI8658_CTRL7_ACC_EN)) {
+    return false;
+  }
 
   return true;
 }
@@ -400,25 +504,35 @@ bool QMI8658WoMBinarySensor::configure_wom_() {
 void QMI8658WoMBinarySensor::loop() {
   if (this->interrupt_triggered_) {
     this->interrupt_triggered_ = false;
+    ESP_LOGV(TAG, "WoM: GPIO interrupt (edge detected)");
 
-    // Read STATUS1 to check wake event and clear interrupt
+    // Read STATUS1 to check WoM event
+    // Per datasheet: bit 2 is the WoM flag, reading STATUS1 clears it and resets INT pin
     uint8_t status;
     if (this->parent_->read_byte(QMI8658_REG_STATUS1, &status)) {
-      // Bit 2 is the wake-up event flag
-      bool wake_event = (status & 0x04) != 0;
-      if (wake_event) {
+      bool wom_event = (status & 0x04) != 0;
+      if (wom_event) {
+        ESP_LOGI(TAG, "WoM: Motion detected! (STATUS1=0x%02X)", status);
         this->publish_state(true);
-        // Set a timer to reset the state after a short delay
         this->last_state_ = true;
+        this->motion_detected_time_ = millis();
+      } else {
+        // Interrupt fired but WoM flag not set - this can happen because:
+        // 1. Interrupt toggles on each event (we catch both edges)
+        // 2. Reading STATUS1 cleared the flag before we read it
+        ESP_LOGV(TAG, "WoM: Edge detected, WoM flag not set (STATUS1=0x%02X)", status);
       }
+    } else {
+      ESP_LOGW(TAG, "WoM: Failed to read STATUS1");
     }
-  } else if (this->last_state_) {
-    // Auto-reset after wake event (typical for motion sensors)
-    // Check if pin is still high (motion ongoing) or low (motion stopped)
-    if (!this->interrupt_pin_->digital_read()) {
-      this->publish_state(false);
-      this->last_state_ = false;
-    }
+  }
+
+  // Auto-clear motion state after hold time
+  // This gives Home Assistant time to register the motion event
+  if (this->last_state_ && (millis() - this->motion_detected_time_ >= MOTION_HOLD_TIME_MS)) {
+    ESP_LOGV(TAG, "WoM: Motion cleared (hold time elapsed)");
+    this->publish_state(false);
+    this->last_state_ = false;
   }
 }
 

@@ -12,6 +12,9 @@
 namespace esphome {
 namespace qmi8658 {
 
+/// Component version - increment this when making changes for testing
+static const char *const QMI8658_VERSION = "1.0.7";
+
 /// QMI8658C Register Addresses
 static const uint8_t QMI8658_REG_WHO_AM_I = 0x00;
 static const uint8_t QMI8658_REG_REVISION = 0x01;
@@ -30,10 +33,13 @@ static const uint8_t QMI8658_REG_AX_L = 0x35;
 /// Wake on Motion registers
 static const uint8_t QMI8658_REG_CAL1_L = 0x0B;   ///< WoM threshold low byte
 static const uint8_t QMI8658_REG_CAL1_H = 0x0C;   ///< WoM blanking/interrupt config
-static const uint8_t QMI8658_REG_STATUS1 = 0x2D;  ///< Status register with wake event flag
+static const uint8_t QMI8658_REG_STATUSINT = 0x2D;  ///< Sensor data available, lock mechanism
+static const uint8_t QMI8658_REG_STATUS0 = 0x2E;   ///< Output data over-run and availability
+static const uint8_t QMI8658_REG_STATUS1 = 0x2F;   ///< Misc status: CmdDone (bit 0), WoM (bit 2)
 
 /// CTRL9 commands
-static const uint8_t QMI8658_CTRL9_CMD_WOM = 0x0C;  ///< Configure Wake on Motion
+static const uint8_t QMI8658_CTRL9_CMD_ACK = 0x00;  ///< Acknowledge CTRL9 command completion
+static const uint8_t QMI8658_CTRL9_CMD_WOM = 0x08;  ///< Configure Wake on Motion (CTRL_CMD_WRITE_WOM_SETTING)
 
 /// Device identification
 static const uint8_t QMI8658_CHIP_ID = 0x05;
@@ -207,16 +213,21 @@ class QMI8658WoMBinarySensor : public binary_sensor::BinarySensor, public Compon
   void set_parent(QMI8658Component *parent) { parent_ = parent; }
   void set_threshold(uint8_t threshold) { threshold_ = threshold; }
   void set_interrupt_pin(InternalGPIOPin *pin) { interrupt_pin_ = pin; }
+  void set_interrupt_number(uint8_t num) { interrupt_number_ = num; }
 
  protected:
   QMI8658Component *parent_{nullptr};
   InternalGPIOPin *interrupt_pin_{nullptr};
   uint8_t threshold_{100};  ///< WoM threshold in mg (1-255)
+  uint8_t interrupt_number_{1};  ///< Which interrupt pin to use (1 or 2)
   bool last_state_{false};
+  uint32_t motion_detected_time_{0};  ///< Timestamp when motion was detected
 
   bool configure_wom_();
   static void IRAM_ATTR gpio_interrupt_(QMI8658WoMBinarySensor *sensor);
   volatile bool interrupt_triggered_{false};
+
+  static constexpr uint32_t MOTION_HOLD_TIME_MS = 500;  ///< Hold motion state for 500ms
 };
 
 }  // namespace qmi8658

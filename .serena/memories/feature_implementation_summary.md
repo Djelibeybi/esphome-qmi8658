@@ -1,6 +1,6 @@
 # QMI8658C Feature Implementation Summary
 
-## Date: 2026-01-02
+## Date: 2026-01-03 (updated)
 
 ## Features Implemented
 
@@ -39,6 +39,14 @@
 - Requires interrupt pin configuration
 - Configurable threshold (1-255 mg)
 - Platform: `binary_sensor` with `wom:` sub-config
+
+### 8. Low-Pass Filter (LPF) Configuration
+- Hardware-based noise filtering in CTRL5 register
+- Options: DISABLED, 2.66%, 3.63%, 5.39%, 13.37% (% of ODR)
+- Default: 2.66% (most aggressive smoothing)
+- Separate for accel and gyro: `accel_lpf`, `gyro_lpf`
+- At 500Hz ODR with 2.66%, cutoff is ~13Hz
+
 
 ## Files Modified/Created
 - `components/qmi8658/__init__.py` - Updated exports
