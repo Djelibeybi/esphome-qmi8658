@@ -12,7 +12,7 @@ static const char *const TAG = "qmi8658";
 static const float GRAVITY_EARTH = 9.80665f;
 
 /// Radians to degrees conversion factor
-static const float RAD_TO_DEG = 57.295779513f;
+static const float QMI_RAD_TO_DEG = 57.295779513f;
 
 float QMI8658Component::get_accel_sensitivity_for_range_(AccelScale range) {
   switch (range) {
@@ -186,8 +186,8 @@ void QMI8658Component::update() {
   // Calculate pitch and roll from accelerometer (gravity vector)
   // Pitch: rotation around Y axis (nose up/down)
   // Roll: rotation around X axis (bank left/right)
-  float pitch = std::atan2(accel_x, std::sqrt(accel_y * accel_y + accel_z * accel_z)) * RAD_TO_DEG;
-  float roll = std::atan2(accel_y, std::sqrt(accel_x * accel_x + accel_z * accel_z)) * RAD_TO_DEG;
+  float pitch = std::atan2(accel_x, std::sqrt(accel_y * accel_y + accel_z * accel_z)) * QMI_RAD_TO_DEG;
+  float roll = std::atan2(accel_y, std::sqrt(accel_x * accel_x + accel_z * accel_z)) * QMI_RAD_TO_DEG;
 
   ESP_LOGV(TAG, "Accel: X=%.2f Y=%.2f Z=%.2f m/s^2", accel_x, accel_y, accel_z);
   ESP_LOGV(TAG, "Gyro: X=%.2f Y=%.2f Z=%.2f dps", gyro_x, gyro_y, gyro_z);
