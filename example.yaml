@@ -56,6 +56,9 @@ qmi8658:
   # Low-pass filter settings (bandwidth as % of ODR, lower = more smoothing)
   accel_lpf: 2.66%       # Options: DISABLED, 2.66%, 3.63%, 5.39%, 13.37% (default: 2.66%)
   gyro_lpf: 2.66%        # Options: DISABLED, 2.66%, 3.63%, 5.39%, 13.37% (default: 2.66%)
+  # Mounting orientation correction (for rotated/inverted sensor mounting)
+  rotation: 0            # Options: 0, 90, 180, 270 (degrees clockwise viewed from above)
+  invert_z: false        # Set to true to swap face_up/face_down
 
   # Automation triggers - fire automations without needing sensor platforms
   # on_motion: fires once when motion starts (leading edge only)

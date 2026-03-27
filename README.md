@@ -81,6 +81,10 @@ qmi8658:
   gyro_range: 2048DPS # Options: 16DPS, 32DPS, 64DPS, 128DPS, 256DPS, 512DPS, 1024DPS, 2048DPS
   accel_odr: 500HZ # Options: 8000HZ, 4000HZ, 2000HZ, 1000HZ, 500HZ, 250HZ, 125HZ, 62.5HZ, 31.25HZ
   gyro_odr: 500HZ # Options: 8000HZ, 4000HZ, 2000HZ, 1000HZ, 500HZ, 250HZ, 125HZ, 62.5HZ, 31.25HZ
+
+  # Mounting orientation correction (optional)
+  rotation: 0            # Options: 0, 90, 180, 270 (degrees clockwise viewed from above)
+  invert_z: false        # Swap face_up/face_down (default: false)
 ```
 
 ### Automation Triggers
@@ -173,6 +177,11 @@ sensor:
 - **id** (_Required_, string): Component ID used to reference this component from sensor platforms. You can use any valid ID (e.g., `imu`, `motion_sensor`, `my_qmi8658`).
 - **address** (_Optional_, int): The I2C address of the sensor. Default is `0x6B`.
 - **update_interval** (_Optional_, time): The interval to check the sensor. Default is `60s`.
+
+#### Mounting Orientation
+
+- **rotation** (_Optional_, int): Clockwise rotation in degrees when viewed from above, to compensate for sensor mounting orientation. Options: `0`, `90`, `180`, `270`. Default is `0`.
+- **invert_z** (_Optional_, boolean): Invert the Z axis to swap face-up and face-down detection. Default is `false`.
 
 #### Range and ODR Configuration
 
@@ -311,6 +320,8 @@ qmi8658:
   gyro_range: 512DPS
   accel_odr: 500HZ
   gyro_odr: 500HZ
+  rotation: 90          # Compensate for 90° rotated mounting
+  invert_z: true        # USB port faces down, so invert Z
 
   # Automation triggers (optional, work without sensor platforms)
   on_motion:

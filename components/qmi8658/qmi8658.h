@@ -131,6 +131,8 @@ class QMI8658Component : public PollingComponent, public i2c::I2CDevice {
   void set_gyro_odr(GyroODR odr) { gyro_odr_ = odr; }
   void set_accel_lpf(LPFMode mode) { accel_lpf_ = mode; }
   void set_gyro_lpf(LPFMode mode) { gyro_lpf_ = mode; }
+  void set_rotation(uint16_t rotation) { rotation_ = rotation; }
+  void set_invert_z(bool invert_z) { invert_z_ = invert_z; }
 
   // Accessors for current acceleration values (for binary/text sensors)
   float get_accel_x() const { return last_accel_x_; }
@@ -164,6 +166,8 @@ class QMI8658Component : public PollingComponent, public i2c::I2CDevice {
   GyroODR gyro_odr_{GYRO_ODR_500HZ};
   LPFMode accel_lpf_{LPF_2_66PCT};
   LPFMode gyro_lpf_{LPF_2_66PCT};
+  uint16_t rotation_{0};      ///< Mounting rotation: 0, 90, 180, 270 degrees clockwise
+  bool invert_z_{false};      ///< Invert Z axis (swap face_up / face_down)
 
   // Scaling factors based on configured ranges
   float accel_sensitivity_{16384.0f};  ///< Default: 2g scale (LSB/g)

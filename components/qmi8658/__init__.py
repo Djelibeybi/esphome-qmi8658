@@ -88,6 +88,8 @@ CONF_ACCEL_ODR = "accel_odr"
 CONF_GYRO_ODR = "gyro_odr"
 CONF_ACCEL_LPF = "accel_lpf"
 CONF_GYRO_LPF = "gyro_lpf"
+CONF_ROTATION = "rotation"
+CONF_INVERT_Z = "invert_z"
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -99,6 +101,8 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_GYRO_ODR, default="500HZ"): cv.enum(GYRO_ODR, upper=True),
             cv.Optional(CONF_ACCEL_LPF, default="2.66%"): cv.enum(LPF_MODE, upper=True),
             cv.Optional(CONF_GYRO_LPF, default="2.66%"): cv.enum(LPF_MODE, upper=True),
+            cv.Optional(CONF_ROTATION, default=0): cv.one_of(0, 90, 180, 270, int=True),
+            cv.Optional(CONF_INVERT_Z, default=False): cv.boolean,
             # Automation triggers
             cv.Optional(CONF_ON_MOTION): automation.validate_automation(
                 {
@@ -129,6 +133,8 @@ async def to_code(config):
     cg.add(var.set_gyro_odr(config[CONF_GYRO_ODR]))
     cg.add(var.set_accel_lpf(config[CONF_ACCEL_LPF]))
     cg.add(var.set_gyro_lpf(config[CONF_GYRO_LPF]))
+    cg.add(var.set_rotation(config[CONF_ROTATION]))
+    cg.add(var.set_invert_z(config[CONF_INVERT_Z]))
 
     # Handle on_motion automation triggers
     for conf in config.get(CONF_ON_MOTION, []):

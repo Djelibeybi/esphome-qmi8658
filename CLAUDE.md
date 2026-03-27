@@ -58,4 +58,4 @@ components/qmi8658/
 
 ## Git Preferences
 
-Always use `--no-gpg-sign` when committing.
+Always use `--gpg-sign` when committing.

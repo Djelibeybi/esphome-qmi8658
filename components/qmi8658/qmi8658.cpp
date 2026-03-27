@@ -168,6 +168,25 @@ void QMI8658Component::update() {
   float accel_y = (static_cast<float>(raw_accel_y) / this->accel_sensitivity_) * GRAVITY_EARTH;
   float accel_z = (static_cast<float>(raw_accel_z) / this->accel_sensitivity_) * GRAVITY_EARTH;
 
+  // Apply mounting rotation to accelerometer axes
+  if (this->rotation_ == 90) {
+    float tmp = accel_x;
+    accel_x = accel_y;
+    accel_y = -tmp;
+  } else if (this->rotation_ == 180) {
+    accel_x = -accel_x;
+    accel_y = -accel_y;
+  } else if (this->rotation_ == 270) {
+    float tmp = accel_x;
+    accel_x = -accel_y;
+    accel_y = tmp;
+  }
+
+  // Apply Z-axis inversion (swap face_up / face_down)
+  if (this->invert_z_) {
+    accel_z = -accel_z;
+  }
+
   // Cache accel values for derived sensors (motion detection, orientation)
   this->last_accel_x_ = accel_x;
   this->last_accel_y_ = accel_y;
@@ -182,6 +201,24 @@ void QMI8658Component::update() {
   float gyro_x = static_cast<float>(raw_gyro_x) / this->gyro_sensitivity_;
   float gyro_y = static_cast<float>(raw_gyro_y) / this->gyro_sensitivity_;
   float gyro_z = static_cast<float>(raw_gyro_z) / this->gyro_sensitivity_;
+
+  // Apply mounting rotation to gyroscope axes (same frame as accelerometer)
+  if (this->rotation_ == 90) {
+    float tmp = gyro_x;
+    gyro_x = gyro_y;
+    gyro_y = -tmp;
+  } else if (this->rotation_ == 180) {
+    gyro_x = -gyro_x;
+    gyro_y = -gyro_y;
+  } else if (this->rotation_ == 270) {
+    float tmp = gyro_x;
+    gyro_x = -gyro_y;
+    gyro_y = tmp;
+  }
+
+  if (this->invert_z_) {
+    gyro_z = -gyro_z;
+  }
 
   // Calculate pitch and roll from accelerometer (gravity vector)
   // Pitch: rotation around Y axis (nose up/down)
@@ -272,6 +309,12 @@ void QMI8658Component::dump_config() {
   ESP_LOGCONFIG(TAG, "  Accelerometer LPF: %s", accel_lpf_str);
   ESP_LOGCONFIG(TAG, "  Gyroscope Range: %s", gyro_range_str);
   ESP_LOGCONFIG(TAG, "  Gyroscope LPF: %s", gyro_lpf_str);
+  if (this->rotation_ != 0) {
+    ESP_LOGCONFIG(TAG, "  Mounting Rotation: %d°", this->rotation_);
+  }
+  if (this->invert_z_) {
+    ESP_LOGCONFIG(TAG, "  Z-Axis Inverted: YES");
+  }
 
   LOG_UPDATE_INTERVAL(this);
   LOG_SENSOR("  ", "Acceleration X", this->accel_x_sensor_);
