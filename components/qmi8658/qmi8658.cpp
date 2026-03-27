@@ -202,6 +202,24 @@ void QMI8658Component::update() {
   float gyro_y = static_cast<float>(raw_gyro_y) / this->gyro_sensitivity_;
   float gyro_z = static_cast<float>(raw_gyro_z) / this->gyro_sensitivity_;
 
+  // Apply mounting rotation to gyroscope axes (same frame as accelerometer)
+  if (this->rotation_ == 90) {
+    float tmp = gyro_x;
+    gyro_x = gyro_y;
+    gyro_y = -tmp;
+  } else if (this->rotation_ == 180) {
+    gyro_x = -gyro_x;
+    gyro_y = -gyro_y;
+  } else if (this->rotation_ == 270) {
+    float tmp = gyro_x;
+    gyro_x = -gyro_y;
+    gyro_y = tmp;
+  }
+
+  if (this->invert_z_) {
+    gyro_z = -gyro_z;
+  }
+
   // Calculate pitch and roll from accelerometer (gravity vector)
   // Pitch: rotation around Y axis (nose up/down)
   // Roll: rotation around X axis (bank left/right)
