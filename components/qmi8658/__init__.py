@@ -6,6 +6,7 @@ from esphome.const import CONF_ID, CONF_TRIGGER_ID, CONF_THRESHOLD
 
 CODEOWNERS = ["@Djelibeybi"]
 DEPENDENCIES = ["i2c"]
+AUTO_LOAD = ["sensor", "binary_sensor", "text_sensor"]
 MULTI_CONF = True
 
 CONF_QMI8658_ID = "qmi8658_id"
