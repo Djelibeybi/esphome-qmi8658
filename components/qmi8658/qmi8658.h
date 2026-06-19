@@ -14,7 +14,7 @@ namespace esphome {
 namespace qmi8658 {
 
 /// Component version - increment this when making changes for testing
-static const char *const QMI8658_VERSION = "1.0.9";
+static const char *const QMI8658_VERSION = "1.0.10";
 
 /// QMI8658C Register Addresses
 static const uint8_t QMI8658_REG_WHO_AM_I = 0x00;
