@@ -54,11 +54,14 @@ float QMI8658Component::get_gyro_sensitivity_for_range_(GyroScale range) {
 
 void QMI8658Component::setup() {
   ESP_LOGI(TAG, "QMI8658 component version %s", QMI8658_VERSION);
-  ESP_LOGI(TAG, "Setting up QMI8658...");
+  ESP_LOGI(TAG, "Setting up QMI8658 at I2C address 0x%02X...", this->address_);
 
   // Soft reset the device
   if (!this->write_byte(QMI8658_REG_RESET, 0xB0)) {
-    ESP_LOGE(TAG, "Failed to reset QMI8658");
+    ESP_LOGE(TAG,
+             "Failed to communicate with QMI8658 at I2C address 0x%02X. "
+             "Check wiring and the configured address (the QMI8658 uses 0x6B when SA0 is high, 0x6A when low).",
+             this->address_);
     this->mark_failed();
     return;
   }
@@ -67,7 +70,10 @@ void QMI8658Component::setup() {
   // Verify device ID
   uint8_t chip_id;
   if (!this->read_byte(QMI8658_REG_WHO_AM_I, &chip_id)) {
-    ESP_LOGE(TAG, "Failed to read WHO_AM_I register");
+    ESP_LOGE(TAG,
+             "Failed to read WHO_AM_I register at I2C address 0x%02X. "
+             "Check wiring and the configured address (the QMI8658 uses 0x6B when SA0 is high, 0x6A when low).",
+             this->address_);
     this->mark_failed();
     return;
   }
